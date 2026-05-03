@@ -97,12 +97,13 @@
 
 ### インフラ（推奨構成）
 
-- **Railway**：バックエンド + PostgreSQL（$5〜$10/月）
-  - DB・APIを同一プラットフォームに集約することでIPv6問題を回避
-- **Vercel**：フロントエンド（無料枠）
-- **Docker** によるコンテナ化
-- ※ Supabaseは2024年以降IPv4接続に+$4/月必要なケースあり → 非推奨
-- 詳細比較：[infra-comparison.md](./infra-comparison.md)
+- **Cloudflare Pages**：フロントエンド（無料・帯域無制限）
+- **Lambda + EventBridge Scheduler**：ボット実行（cron、1〜5分間隔）
+- **Lambda + API Gateway**：ダッシュボード向けAPI
+- **DynamoDB**：ボット状態・取引履歴（オンデマンドモード）
+- **Cognito**：認証（5名なら無料）
+- 月額目安：$0〜$5（無料枠をうまく使えばほぼ無料）
+- 詳細比較・コスト試算：[infra-comparison.md](./infra-comparison.md)
 
 ### 取引所ライブラリ
 
