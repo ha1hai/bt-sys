@@ -98,9 +98,11 @@
 ### インフラ（推奨構成）
 
 - **Railway**：バックエンド + PostgreSQL（$5〜$10/月）
+  - DB・APIを同一プラットフォームに集約することでIPv6問題を回避
 - **Vercel**：フロントエンド（無料枠）
-- **Supabase**：DB認証機能の流用も可（無料枠あり）
 - **Docker** によるコンテナ化
+- ※ Supabaseは2024年以降IPv4接続に+$4/月必要なケースあり → 非推奨
+- 詳細比較：[infra-comparison.md](./infra-comparison.md)
 
 ### 取引所ライブラリ
 
