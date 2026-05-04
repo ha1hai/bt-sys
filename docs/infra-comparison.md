@@ -6,184 +6,154 @@
 
 ## 推奨構成（現時点）
 
-**Lambda cron + DynamoDB + Cloudflare Pages**
+**VPS（Hetzner CAX11）+ PostgreSQL + Cloudflare Pages**
 
 ```
 [フロントエンド]  Cloudflare Pages         → 無料
 [CDN]            Cloudflare CDN            → 無料
-[認証]           Cognito                   → 無料（5名）
-[API]            Lambda + API Gateway      → 無料枠内
-[ボット実行]     Lambda（EventBridge cron） → 無料枠内 ※設計次第
-[DB]             DynamoDB                  → 無料枠内 ※低頻度設計
+[API + ボット]   VPS上のPython/FastAPI     → €3.79/月
+[DB]             VPS上のPostgreSQL         → 無料（VPS込み）
+[認証]           自前JWT or Cognito        → 無料
 ```
 
-**月額目安：$0〜$5/月**（うまく設計すればほぼ無料）
+**月額目安：€3.79〜$6/月（固定）**
 
 ---
 
-## Lambda cron によるボット実行の設計
+## 構成別 総合比較
 
-### 基本アーキテクチャ
+| | VPS (Hetzner) | Lambda cron | Cloud Run |
+|--|--------------|------------|-----------|
+| **月額** | ◎ €3.79固定 | △ $0〜$5（設計次第）/ 設計ミスで$100〜$200 | ○ $10〜$40 |
+| **Python依存パッケージ** | ◎ apt-get + pip で自由 | △ ccxt/ta-libは工夫必要 | ◎ Dockerで解決 |
+| **運用・監視** | △ 自前構築 | ◎ CloudWatch完備 | ○ Cloud Logging |
+| **DB接続** | ◎ ローカル接続（最速） | ◎ DynamoDB AWS内部通信 | △ クロスクラウド |
+| **スケーリング** | △ 手動 | ○ 自動 | ◎ 柔軟・自動 |
+| **構成のシンプルさ** | ◎ ssh + systemd | △ IAM/SAM学習コスト高い | ○ Dockerfile + gcloud |
+| **将来の移行性** | ◎ 制約なし | △ ベンダーロックイン | ○ Kubernetes移行可 |
 
-- EventBridge Schedulerで**1つのLambdaを1〜5分ごとに起動**
-- Lambda起動時にDynamoDBのボット一覧を取得し、`status=running` のボットだけ順次処理
-- ボットのポジション・最終実行時刻・注文状態はすべてDynamoDBに保持
-
-```
-EventBridge Scheduler（1〜5分ごと）
-    ↓
-Lambda（1関数）
-    ↓ DynamoDBからrunningボットを取得
-    ↓ 各ボット: 取引所REST API → シグナル計算 → 注文 → DB更新
-    ↓
-DynamoDB（ボット状態・取引履歴）
-```
-
-### 成立する理由
-
-| 懸念点 | 対応 |
-|--------|------|
-| 常時起動できない | cron間隔（1〜5分）で十分なトレード戦略に絞る（スキャルピングは不向き） |
-| WebSocket不可 | 取引所REST APIのポーリングで代替。bitFlyerはREST APIで現在価格・約定履歴取得可能 |
-| タイムアウト15分 | 数十ボットの順次処理でも通常1〜2分で完了。余裕あり |
-| コールドスタート | トレード戦略の性質上、秒単位の即応が不要なら問題なし |
-| 複数ボットの競合 | DynamoDBの条件付き書き込みでポジション更新を冪等に設計 |
-
-### EventBridge Scheduler の無料枠
-
-- 無料枠：**月1400万回**（EventBridgeスケジューラー）
-- 1スケジュール × 1分間隔 = 月43,200回 → **余裕で無料枠内**
-- ボットごとに個別スケジュールを立てると数十×43,200回で超過するため、**1スケジュール・1Lambda・複数ボット順次処理**が必須
-
-### Lambda 無料枠との関係
-
-- 無料枠：月100万リクエスト、40万GB秒
-- 1分間隔 × 43,200回/月、1回あたり30秒・512MB想定 → 約6,480GB秒/月
-- **40万GB秒の無料枠内に収まる**（余裕あり）
+**VPSを推奨する理由：**
+- 月€3.79固定でコスト予測が容易
+- Python依存パッケージ（ccxt、pandas、ta-lib）を制約なくインストール可能
+- PostgreSQLをVPS上に置けばDBの外部依存なし
+- systemdでボットを常時稼働させるだけでシンプル
+- 監視スクリプトを1本書けば障害復旧も自動化可能
 
 ---
 
-## Cloudflare Pages によるフロントエンド
+## VPS 選定比較
+
+| サービス | プラン | 月額 | スペック | 特徴 |
+|----------|--------|------|----------|------|
+| **Hetzner CAX11** | ARM | €3.79 | 2vCPU, 4GB RAM, 40GB SSD | ◎ 最安・高コスパ。日本からの遅延は許容範囲 |
+| **Hetzner CX22** | x86 | €3.79 | 2vCPU, 4GB RAM, 40GB SSD | ○ x86互換性が必要な場合 |
+| **Vultr Cloud Compute** | Regular | $6 | 1GB RAM, 25GB SSD | △ Hetznerよりスペック低い |
+| **Vultr Tokyo** | Regular | $6 | 1GB RAM | ○ 東京リージョンで低レイテンシー |
+| **Contabo VPS S** | - | €4.50 | 4vCPU, 8GB RAM, 100GB SSD | ○ スペック高いが初期費用あり |
+
+**推奨：Hetzner CAX11**（コスパ最良）またはレイテンシー優先なら**Vultr Tokyo**
+
+---
+
+## フロントエンド：Cloudflare Pages
 
 | 項目 | 内容 |
 |------|------|
 | **料金** | 無料（帯域幅無制限、ビルド月500回） |
-| **CDN** | Cloudflareグローバルネットワークで自動配信 |
+| **CDN** | Cloudflareグローバルネットワーク自動配信 |
 | **HTTPS** | 自動（カスタムドメイン対応） |
-| **API接続** | AWS API GatewayのエンドポイントをCORSで呼び出し |
-| **認証** | CognitoのJWTをブラウザ側で取得・保持、API Gatewayに渡す |
-
-**Vercel vs Cloudflare Pages（本構成での比較）**
-
-| | Cloudflare Pages | Vercel |
-|--|-----------------|--------|
-| 無料帯域 | 無制限 | 100GB/月 |
-| ビルド回数 | 500回/月 | 100回/月（Hobby） |
-| CDN性能 | ◎ 世界最大級 | ○ |
-| AWSとの相性 | ○ CORS設定で連携可 | ○ 同様 |
-| **結論** | ◎ 本構成に最適 | ○ 差は小さい |
+| **API接続** | VPSのFastAPIエンドポイントをCORSで呼び出し |
+| **Vercelとの比較** | 帯域無制限・ビルド500回/月でVercel（100回）より有利 |
 
 ---
 
-## AWS 無料枠 詳細
+## データベース：PostgreSQL on VPS
 
-| サービス | 無料枠 | 本構成での消費量 | 判定 |
-|----------|--------|----------------|------|
-| **Lambda** | 月100万req、40万GB秒（永続） | 約43,200req、約6,500GB秒 | ✓ 無料枠内 |
-| **EventBridge Scheduler** | 月1400万回（永続） | 約43,200回 | ✓ 無料枠内 |
-| **DynamoDB** | 25GB、WCU25/RCU25（永続） | ボット数十×1分間隔の読み書き | △ 設計次第。後述 |
-| **API Gateway** | 月100万req（永続） | ダッシュボード操作分のみ | ✓ 無料枠内 |
-| **Cognito** | 月5万MAU（永続） | 5名 | ✓ 無料枠内 |
+VPS上にPostgreSQLを立てることでDBの外部依存をゼロにする。
 
-### DynamoDB 無料枠の注意点
+| 用途 | テーブル設計方針 |
+|------|----------------|
+| ユーザー管理 | users テーブル（メール、ハッシュ化パスワード、APIキー暗号化） |
+| ボット状態管理 | bots テーブル（status, strategy, position, last_executed） |
+| 取引履歴 | trades テーブル（時系列、ボットID、損益） |
+| 戦略設定 | strategies テーブル（パラメータJSON） |
 
-- 無料枠：RCU25 / WCU25（プロビジョンドモード）
-- ボット数十 × 1分間隔で読み書きすると**WCUが不足する可能性**
-- 対策：**オンデマンドモード**に切り替え（最初の250万読み書きは無料）
-  - 月43,200回 × 読み書き各1〜2回 = 約10万リクエスト → **無料枠内**
+DynamoDBと異なり集計クエリ（日次損益、勝率計算）がSQLで直接実行可能。
 
 ---
 
-## プラットフォーム比較
+## 認証方式
 
-| サービス | 月額目安 | 特徴 | 向き/不向き |
-|----------|----------|------|-------------|
-| **AWS Lambda cron + DynamoDB + Cloudflare** | $0〜$5 | 無料枠最大活用。設計工夫が必要 | ◎ コスト最優先 |
-| **Railway** | $5〜$20 | シンプル、PostgreSQL込み | ○ 構成シンプル優先 |
-| **Fly.io** | $2〜$15 | 小さいVM、東京リージョン | ○ コスト優先。IPv6注意 |
-| **VPS (Hetzner/Vultr)** | $6〜$12 | 固定費・自由度高い | ○ 運用コスト最小化 |
-| **AWS ECS+RDS** | $50〜$150 | 高可用性・柔軟 | ✗ 5名規模ではオーバースペック |
-| **GCP Cloud Run+CloudSQL** | $50〜$150 | 常時起動ボットとやや相性悪い | ✗ 割高 |
-| **Cloudflare Workers+D1** | $5〜$20 | エッジ実行、常時稼働不向き | ✗ ボット実行には不向き |
+| 方式 | 月額 | 特徴 |
+|------|------|------|
+| **自前JWT（推奨）** | $0 | FastAPIで実装。5名規模では十分 |
+| **Cognito** | $0（5名） | AWSに依存。過剰かもしれない |
+| **Supabase Auth** | $0（無料枠） | PostgreSQLとセット利用可。ただしIPv6問題あり |
+
+**推奨：自前JWT**（外部依存なし、VPS内で完結）
 
 ---
 
 ## IPv6問題について
 
-2024年以降、AWSがIPv4アドレスを有料化したことで多くのサービスが影響を受けている。
-**本構成（Lambda + DynamoDB）はIPv6問題なし**。LambdaからDynamoDBはAWS内部通信のため。
+本構成（VPS + PostgreSQL）はIPv6問題なし。VPSはIPv4アドレス付きで提供される。
 
 | サービス | IPv6対応 | 備考 |
 |----------|----------|------|
-| **Lambda → DynamoDB** | ○ | AWS内部通信。問題なし |
-| **Lambda → bitFlyer API** | ○ | LambdaはIPv4/IPv6両対応 |
+| **Hetzner VPS** | ○ | IPv4込み。追加費用なし |
+| **Vultr VPS** | ○ | IPv4込み。追加費用なし |
 | **Supabase** | △ | 直接接続はIPv6のみ。IPv4は+$4/月 |
 | **Railway** | ○ | 内部接続なら問題なし |
-| **Fly.io** | △ | 内部はIPv6専用。外部IPv4は有料 |
-| **Neon** | ○ | IPv4/IPv6両対応 |
+| **AWS Lambda → DynamoDB** | ○ | AWS内部通信 |
 
 ---
 
 ## コスト試算（月額）
 
-### 推奨構成：Lambda cron + DynamoDB + Cloudflare Pages
+### 推奨構成：VPS + Cloudflare Pages
 
 | コンポーネント | サービス | 費用 |
 |---------------|----------|------|
-| ボット実行 | Lambda + EventBridge Scheduler | $0（無料枠内） |
-| API | Lambda + API Gateway | $0（無料枠内） |
-| データベース | DynamoDB（オンデマンド） | $0（無料枠内） |
-| 認証 | Cognito | $0（5名） |
+| API + ボット実行 + DB | Hetzner CAX11 | €3.79 |
 | フロントエンド | Cloudflare Pages | $0 |
 | 通知（Discord/LINE） | 各無料枠 | $0 |
-| **合計** | | **$0〜$5/月** ※トレード頻度次第 |
+| ドメイン（任意） | Cloudflare Registrar | $8〜$15/年 |
+| **合計** | | **€3.79/月（約$4）** |
 
-### 代替構成：Railway + Cloudflare Pages
-
-| コンポーネント | サービス | 費用 |
-|---------------|----------|------|
-| バックエンド（API + ボット） | Railway | $5〜$10 |
-| データベース | Railway PostgreSQL（込み） | $0 |
-| フロントエンド | Cloudflare Pages | $0 |
-| **合計** | | **$5〜$10/月** |
-
-### 将来拡張時
+### 比較：Lambda + DynamoDB + Cloudflare Pages
 
 | コンポーネント | サービス | 費用 |
 |---------------|----------|------|
-| ボット実行 | Lambda（無料枠超過後） | $5〜$10 |
-| DB | DynamoDB（無料枠超過後） | $5〜$15 |
+| ボット実行 | Lambda + EventBridge | $0（1スケジュール設計厳守） |
+| API | Lambda + API Gateway | $0（無料枠内） |
+| DB | DynamoDB | $0（低頻度設計） |
+| 認証 | Cognito | $0 |
 | フロントエンド | Cloudflare Pages | $0 |
-| **合計** | | **$10〜$25/月** |
+| **合計** | | **$0〜$5/月**（設計制約が多い） |
+
+### 将来拡張時（VPS構成）
+
+| コンポーネント | サービス | 費用 |
+|---------------|----------|------|
+| VPS増強 | Hetzner CX32 | €11.10 |
+| フロントエンド | Cloudflare Pages | $0 |
+| **合計** | | **€11/月程度** |
 
 ---
 
 ## コスト削減の設計方針
 
-1. **1スケジュール・1Lambda・複数ボット順次処理**
-   - EventBridge Schedulerのスケジュール数を最小化して無料枠内に収める
+1. **VPS上にAPI・ボット・DBをすべて同居**
+   - 外部サービス依存をゼロにしてコスト固定化
 
-2. **DynamoDBはオンデマンドモードで使用**
-   - プロビジョンドモード（RCU/WCU固定）より無料枠の消費を柔軟に管理
-
-3. **フロントはCloudflare Pages（無料・帯域無制限）**
+2. **フロントはCloudflare Pages（無料・帯域無制限）**
    - Vercelより帯域・ビルド回数の制限が緩い
 
-4. **バックテストはオンデマンドLambda実行**
-   - 常時起動不要。リクエスト時のみ実行してリソース節約
+3. **バックテストはオンデマンド実行**
+   - APIリクエスト時のみ実行し、常時リソースを消費しない設計
 
-5. **取引所データはLambda内キャッシュ + DynamoDB短期保存**
-   - 同一実行内での重複API呼び出しを排除
+4. **Redisは不使用**
+   - PostgreSQLのステータス管理で代替
 
-6. **Redisは不使用**
-   - DynamoDBのステータス管理で代替
+5. **監視はシンプルに**
+   - systemdによる自動再起動 + UptimeRobot（無料）で死活監視

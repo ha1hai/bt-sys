@@ -67,11 +67,11 @@
 |------|------|
 | 可用性 | 24時間365日稼働（ダウンタイム最小化） |
 | 想定ユーザー数 | 最大5名 |
-| インフラ | クラウド（低コスト優先）→ 詳細は [infra-comparison.md](./infra-comparison.md) |
+| インフラ | VPS（Hetzner CAX11）+ Cloudflare Pages → 詳細は [infra-comparison.md](./infra-comparison.md) |
 | スマホ対応 | レスポンシブWebデザイン（モバイルブラウザ対応） |
 | セキュリティ | APIキーの暗号化保存、HTTPS通信、認証トークン管理 |
 | 拡張性 | 取引所・戦略を追加しやすい設計（インターフェース抽象化） |
-| 運用コスト目安 | $0〜$5/月（MVP段階、AWS無料枠活用） |
+| 運用コスト目安 | €3.79/月固定（Hetzner VPS） |
 
 ---
 
@@ -92,17 +92,16 @@
 
 ### データベース
 
-- **DynamoDB**（ボット状態・取引履歴の永続化、オンデマンドモード）
-- Redis は不使用（DynamoDBのステータス管理で代替）
+- **PostgreSQL**（VPS上に同居、外部依存なし）
+- Redis は不使用（PostgreSQLのステータス管理で代替）
+- DynamoDBと異なり集計クエリ（日次損益・勝率）をSQLで直接実行可能
 
 ### インフラ（推奨構成）
 
+- **Hetzner CAX11 VPS**：API・ボット実行・PostgreSQL（€3.79/月・固定）
 - **Cloudflare Pages**：フロントエンド（無料・帯域無制限）
-- **Lambda + EventBridge Scheduler**：ボット実行（cron、1〜5分間隔）
-- **Lambda + API Gateway**：ダッシュボード向けAPI
-- **DynamoDB**：ボット状態・取引履歴（オンデマンドモード）
-- **Cognito**：認証（5名なら無料）
-- 月額目安：$0〜$5（無料枠をうまく使えばほぼ無料）
+- **認証**：自前JWT（外部依存なし、FastAPIで実装）
+- 月額目安：€3.79（約$4）固定
 - 詳細比較・コスト試算：[infra-comparison.md](./infra-comparison.md)
 
 ### 取引所ライブラリ
