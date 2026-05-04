@@ -1,0 +1,45 @@
+name: Deploy Backend
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "backend/**"
+      - ".github/workflows/deploy-backend.yml"
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Deploy to VPS
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: deploy
+          key: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          script: |
+            set -e
+
+            cd /opt/bt-sys/backend
+
+            # 最新コードを取得
+            git fetch origin main
+            git reset --hard origin/main
+
+            # 依存パッケージ更新
+            ./venv/bin/pip install -r requirements.txt --quiet
+
+            # DBマイグレーション
+            ./venv/bin/alembic upgrade head
+
+            # サービス再起動
+            sudo systemctl restart bt-sys-api
+            sudo systemctl restart bt-sys-bot
+
+            # 起動確認
+            sleep 3
+            curl -sf http://localhost:8000/health || exit 1
+            echo "Deploy succeeded"

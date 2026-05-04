@@ -1,0 +1,123 @@
+#cloud-config
+
+# タイムゾーン設定
+timezone: Asia/Tokyo
+
+# パッケージ更新
+package_update: true
+package_upgrade: true
+
+packages:
+  - curl
+  - git
+  - ufw
+  - fail2ban
+  - docker.io
+  - docker-compose
+  - postgresql
+  - postgresql-contrib
+  - nginx
+  - certbot
+  - python3-certbot-nginx
+
+# デプロイ用ユーザー作成
+users:
+  - name: deploy
+    groups: [sudo, docker]
+    shell: /bin/bash
+    sudo: ALL=(ALL) NOPASSWD:ALL
+    lock_passwd: true
+
+runcmd:
+  # UFWファイアウォール設定
+  - ufw default deny incoming
+  - ufw default allow outgoing
+  - ufw allow ssh
+  - ufw allow http
+  - ufw allow https
+  - ufw --force enable
+
+  # fail2ban有効化
+  - systemctl enable fail2ban
+  - systemctl start fail2ban
+
+  # Docker有効化
+  - systemctl enable docker
+  - systemctl start docker
+
+  # PostgreSQL設定
+  - systemctl enable postgresql
+  - systemctl start postgresql
+  - sudo -u postgres psql -c "CREATE USER btsys WITH PASSWORD 'changeme_in_production';"
+  - sudo -u postgres psql -c "CREATE DATABASE btsys OWNER btsys;"
+  - sudo -u postgres psql -c "GRANT ALL PRIVILEGES ON DATABASE btsys TO btsys;"
+
+  # アプリディレクトリ作成
+  - mkdir -p /opt/bt-sys/backend
+  - mkdir -p /opt/bt-sys/logs
+  - chown -R deploy:deploy /opt/bt-sys
+
+  # Nginx設定
+  - systemctl enable nginx
+  - systemctl start nginx
+
+write_files:
+  # Nginx設定（APIリバースプロキシ）
+  - path: /etc/nginx/sites-available/bt-sys
+    content: |
+      server {
+          listen 80;
+          server_name _;
+
+          location /api/ {
+              proxy_pass http://127.0.0.1:8000/;
+              proxy_set_header Host $host;
+              proxy_set_header X-Real-IP $remote_addr;
+              proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+              proxy_set_header X-Forwarded-Proto $scheme;
+          }
+
+          location /health {
+              proxy_pass http://127.0.0.1:8000/health;
+          }
+      }
+
+  # systemdサービス（バックエンドAPI）
+  - path: /etc/systemd/system/bt-sys-api.service
+    content: |
+      [Unit]
+      Description=BT-SYS API Server
+      After=network.target postgresql.service
+
+      [Service]
+      User=deploy
+      WorkingDirectory=/opt/bt-sys/backend
+      ExecStart=/opt/bt-sys/backend/venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8000
+      Restart=always
+      RestartSec=5
+      StandardOutput=append:/opt/bt-sys/logs/api.log
+      StandardError=append:/opt/bt-sys/logs/api-error.log
+      EnvironmentFile=/opt/bt-sys/backend/.env
+
+      [Install]
+      WantedBy=multi-user.target
+
+  # systemdサービス（ボット実行）
+  - path: /etc/systemd/system/bt-sys-bot.service
+    content: |
+      [Unit]
+      Description=BT-SYS Bot Runner
+      After=network.target postgresql.service bt-sys-api.service
+
+      [Service]
+      User=deploy
+      WorkingDirectory=/opt/bt-sys/backend
+      ExecStart=/opt/bt-sys/backend/venv/bin/python -m app.bot.runner
+      Restart=always
+      RestartSec=10
+      StandardOutput=append:/opt/bt-sys/logs/bot.log
+      StandardError=append:/opt/bt-sys/logs/bot-error.log
+      EnvironmentFile=/opt/bt-sys/backend/.env
+
+      [Install]
+      WantedBy=multi-user.target
