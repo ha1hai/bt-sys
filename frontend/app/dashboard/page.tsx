@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Plus, Play, Square, Trash2, AlertCircle, Bot as BotIcon } from "lucide-react";
+import { Plus, Play, Square, Trash2, AlertCircle, Bot as BotIcon, Pencil } from "lucide-react";
 import { bots, type Bot, type Performance } from "@/lib/api";
 
 const STATUS_STYLES: Record<string, string> = {
@@ -146,6 +146,12 @@ export default function DashboardPage() {
                       <Play size={14} /> 起動
                     </button>
                   )}
+                  <Link
+                    href={`/dashboard/bots/${bot.id}/edit`}
+                    className="p-2 text-gray-500 hover:text-indigo-400 hover:bg-gray-800 rounded-lg transition-colors"
+                  >
+                    <Pencil size={16} />
+                  </Link>
                   <button
                     onClick={() => handleDelete(bot.id)}
                     disabled={bot.status === "running"}

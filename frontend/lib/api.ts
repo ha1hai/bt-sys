@@ -87,8 +87,11 @@ export type Performance = {
 
 export const bots = {
   list: () => request<Bot[]>("/bots"),
+  get: (id: string) => request<Bot>(`/bots/${id}`),
   create: (data: BotCreate) =>
     request<Bot>("/bots", { method: "POST", body: JSON.stringify(data) }),
+  update: (id: string, data: Partial<BotCreate>) =>
+    request<Bot>(`/bots/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
   start: (id: string) => request<Bot>(`/bots/${id}/start`, { method: "POST" }),
   stop: (id: string) => request<Bot>(`/bots/${id}/stop`, { method: "POST" }),
   delete: (id: string) => request<void>(`/bots/${id}`, { method: "DELETE" }),
