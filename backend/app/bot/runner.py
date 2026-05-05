@@ -20,13 +20,14 @@ from app.services.notifier import notify
 
 logger = logging.getLogger(__name__)
 
-INTERVAL_SECONDS = 60  # 実行間隔
+DEFAULT_INTERVAL_SECONDS = 60
+DEFAULT_TIMEFRAME = "1h"
+DEFAULT_OHLCV_LIMIT = 100
 
 
 async def run_bot(bot: Bot, session) -> None:
     logger.info(f"Running bot {bot.id} ({bot.name})")
 
-    # 取引所APIキーを取得
     from sqlalchemy import select as sel
     from app.models.exchange_key import ExchangeKey
     result = await session.execute(
@@ -41,10 +42,15 @@ async def run_bot(bot: Bot, session) -> None:
         bot.error_message = "Exchange key not found"
         return
 
+    # ボットごとの実行設定（strategy_paramsから取得、なければデフォルト）
+    params = bot.strategy_params or {}
+    timeframe = params.get("timeframe", DEFAULT_TIMEFRAME)
+    ohlcv_limit = params.get("ohlcv_limit", DEFAULT_OHLCV_LIMIT)
+
     exchange = create_exchange(bot.exchange, decrypt(key.api_key_encrypted), decrypt(key.api_secret_encrypted))
     try:
         strategy = create_strategy(bot.strategy, bot.strategy_params)
-        ohlcv = await exchange.fetch_ohlcv(bot.symbol, "1h", limit=100)
+        ohlcv = await exchange.fetch_ohlcv(bot.symbol, timeframe, limit=ohlcv_limit)
         signal = strategy.generate_signal(ohlcv)
 
         # ポジション取得
@@ -118,11 +124,18 @@ async def run_bot(bot: Bot, session) -> None:
 
 
 async def run_all_bots() -> None:
+    now = datetime.now(timezone.utc)
     async with AsyncSessionLocal() as session:
         result = await session.execute(select(Bot).where(Bot.status == "running"))
         bots = result.scalars().all()
 
         for bot in bots:
+            # ボットごとの interval_seconds に基づいて実行タイミングを判定
+            interval = (bot.strategy_params or {}).get("interval_seconds", DEFAULT_INTERVAL_SECONDS)
+            if bot.last_executed_at is not None:
+                elapsed = (now - bot.last_executed_at).total_seconds()
+                if elapsed < interval:
+                    continue
             await run_bot(bot, session)
 
         await session.commit()
@@ -131,12 +144,13 @@ async def run_all_bots() -> None:
 async def main() -> None:
     logging.basicConfig(level=logging.INFO)
     logger.info("Bot runner started")
+    # メインループは最小間隔（60秒）で回し、各ボットのinterval_secondsで実行を制御
     while True:
         try:
             await run_all_bots()
         except Exception as e:
             logger.error(f"Runner error: {e}")
-        await asyncio.sleep(INTERVAL_SECONDS)
+        await asyncio.sleep(DEFAULT_INTERVAL_SECONDS)
 
 
 if __name__ == "__main__":
