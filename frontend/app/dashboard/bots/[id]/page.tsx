@@ -83,6 +83,12 @@ export default function BotDetailPage() {
 
       {tab === "backtest" && (
         <div className="space-y-6">
+          {/* データソース注記 */}
+          <div className="bg-amber-500/10 border border-amber-500/30 rounded-lg px-4 py-3 text-xs text-amber-300 space-y-1">
+            <p className="font-medium">データソースについて</p>
+            <p>バックテストは <span className="font-semibold">Binance の公開API</span> から取得した価格データ（USDT建て）を使用しています。実際の取引は bitFlyer（JPY建て）で行われるため、絶対的な損益額は異なります。値動きのパターンや戦略の有効性を検証する目的でご利用ください。</p>
+          </div>
+
           {/* 期間選択 + 実行 */}
           <div className="flex items-center gap-3">
             <div className="flex gap-1 bg-gray-900 border border-gray-800 rounded-lg p-1">
@@ -107,14 +113,29 @@ export default function BotDetailPage() {
             <div className="space-y-6">
               {/* サマリー */}
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                <StatCard label="総損益"
-                  value={`${result.total_pnl >= 0 ? "+" : ""}${result.total_pnl.toLocaleString()}円`}
-                  positive={result.total_pnl >= 0} />
-                <StatCard label="取引回数" value={`${result.trade_count}回`} />
-                <StatCard label="勝率" value={`${result.win_rate.toFixed(1)}%`}
-                  positive={result.win_rate >= 50} />
-                <StatCard label="最大DD" value={`${result.max_drawdown.toFixed(1)}%`}
-                  positive={result.max_drawdown < 10} />
+                <StatCard
+                  label="総損益"
+                  value={`${result.total_pnl >= 0 ? "+" : ""}${result.total_pnl.toLocaleString(undefined, { maximumFractionDigits: 2 })} USDT`}
+                  positive={result.total_pnl >= 0}
+                  description="全売却取引の損益合計。計算式：Σ (売却価格 − 購入価格) × 数量"
+                />
+                <StatCard
+                  label="取引回数"
+                  value={`${result.trade_count}回`}
+                  description="売却が確定した取引の回数（買いと売りの1セットを1回とカウント）"
+                />
+                <StatCard
+                  label="勝率"
+                  value={`${result.win_rate.toFixed(1)}%`}
+                  positive={result.win_rate >= 50}
+                  description={`勝ちトレード数 ÷ 総取引回数 × 100。勝ち：${result.win_count}回 / 負け：${result.trade_count - result.win_count}回`}
+                />
+                <StatCard
+                  label="最大DD"
+                  value={`${result.max_drawdown.toFixed(1)}%`}
+                  positive={result.max_drawdown < 10}
+                  description="最大ドローダウン。資産が直近の最高値からどれだけ下落したかの最大値。計算式：(最高値 − 最安値) ÷ 最高値 × 100"
+                />
               </div>
 
               {/* 資産推移グラフ */}
@@ -224,13 +245,30 @@ export default function BotDetailPage() {
   );
 }
 
-function StatCard({ label, value, positive }: { label: string; value: string; positive?: boolean }) {
+function StatCard({ label, value, positive, description }: {
+  label: string;
+  value: string;
+  positive?: boolean;
+  description?: string;
+}) {
+  const [open, setOpen] = useState(false);
   return (
-    <div className="bg-gray-900 rounded-xl p-4 border border-gray-800 text-center">
-      <p className="text-xs text-gray-500 mb-1">{label}</p>
+    <div className="bg-gray-900 rounded-xl p-4 border border-gray-800 text-center relative">
+      <div className="flex items-center justify-center gap-1 mb-1">
+        <p className="text-xs text-gray-500">{label}</p>
+        {description && (
+          <button onClick={() => setOpen((v) => !v)}
+            className="text-gray-600 hover:text-gray-400 leading-none text-xs">?</button>
+        )}
+      </div>
       <p className={`text-lg font-semibold ${positive === true ? "text-emerald-400" : positive === false ? "text-red-400" : "text-white"}`}>
         {value}
       </p>
+      {open && description && (
+        <div className="absolute z-10 top-full left-0 mt-1 w-64 bg-gray-800 border border-gray-700 rounded-lg p-3 text-xs text-gray-300 text-left shadow-xl">
+          {description}
+        </div>
+      )}
     </div>
   );
 }
