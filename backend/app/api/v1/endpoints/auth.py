@@ -17,7 +17,7 @@ router = APIRouter()
 async def register(body: UserRegister, db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(User).where(User.email == body.email))
     if result.scalar_one_or_none():
-        raise HTTPException(status_code=400, detail="Email already registered")
+        raise HTTPException(status_code=400, detail="このメールアドレスはすでに登録されています")
 
     user = User(
         email=body.email,
@@ -37,7 +37,7 @@ async def login(body: UserLogin, db: AsyncSession = Depends(get_db)):
     user = result.scalar_one_or_none()
 
     if not user or not verify_password(body.password, user.hashed_password):
-        raise HTTPException(status_code=401, detail="Invalid credentials")
+        raise HTTPException(status_code=401, detail="メールアドレスまたはパスワードが正しくありません")
 
     return TokenResponse(access_token=create_access_token(user.id))
 

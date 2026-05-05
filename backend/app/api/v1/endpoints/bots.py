@@ -19,7 +19,7 @@ async def _get_bot_or_404(bot_id: str, user: User, db: AsyncSession) -> Bot:
     result = await db.execute(select(Bot).where(Bot.id == bot_id, Bot.user_id == user.id))
     bot = result.scalar_one_or_none()
     if not bot:
-        raise HTTPException(status_code=404, detail="Bot not found")
+        raise HTTPException(status_code=404, detail="ボットが見つかりません")
     return bot
 
 
@@ -77,7 +77,7 @@ async def delete_bot(
 ):
     bot = await _get_bot_or_404(bot_id, current_user, db)
     if bot.status == "running":
-        raise HTTPException(status_code=400, detail="Stop the bot before deleting")
+        raise HTTPException(status_code=400, detail="稼働中のボットは削除できません。先に停止してください")
     await db.delete(bot)
     await db.commit()
 
@@ -90,7 +90,7 @@ async def start_bot(
 ):
     bot = await _get_bot_or_404(bot_id, current_user, db)
     if bot.status == "running":
-        raise HTTPException(status_code=400, detail="Bot is already running")
+        raise HTTPException(status_code=400, detail="ボットはすでに稼働中です")
     bot.status = "running"
     bot.error_message = None
     await db.commit()

@@ -7,7 +7,9 @@ function getToken(): string | null {
 
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   const token = getToken();
-  const res = await fetch(`${API_BASE}${path}`, {
+  let res: Response;
+  try {
+    res = await fetch(`${API_BASE}${path}`, {
     ...init,
     headers: {
       "Content-Type": "application/json",
@@ -15,9 +17,18 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
       ...init.headers,
     },
   });
+  } catch {
+    throw new Error("サーバーに接続できません。ネットワーク接続を確認してください");
+  }
   if (!res.ok) {
-    const err = await res.json().catch(() => ({ detail: res.statusText }));
-    throw new Error(err.detail ?? "Request failed");
+    const err = await res.json().catch(() => null);
+    const detail = err?.detail;
+    if (typeof detail === "string") throw new Error(detail);
+    if (res.status === 401) throw new Error("ログインセッションが切れました。再度ログインしてください");
+    if (res.status === 403) throw new Error("この操作を行う権限がありません");
+    if (res.status === 404) throw new Error("対象が見つかりません");
+    if (res.status >= 500) throw new Error("サーバーエラーが発生しました。しばらく待ってから再試行してください");
+    throw new Error("リクエストに失敗しました");
   }
   if (res.status === 204) return undefined as T;
   return res.json();

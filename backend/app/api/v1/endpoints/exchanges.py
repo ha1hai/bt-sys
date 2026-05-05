@@ -30,12 +30,20 @@ async def add_exchange_key(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    # 疎通確認
     try:
         exchange = create_exchange(body.exchange, body.api_key, body.api_secret)
         await exchange.test_connection()
     except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Connection failed: {e}")
+        msg = str(e).lower()
+        if "key not found" in msg or "invalid api" in msg or "apikey" in msg:
+            detail = "APIキーが無効です。bitFlyer のAPIキー管理画面で確認してください"
+        elif "permission" in msg or "authorization" in msg:
+            detail = "APIキーに必要な権限（残高照会・取引）が付与されていません"
+        elif "connect" in msg or "timeout" in msg or "network" in msg:
+            detail = "取引所への接続に失敗しました。しばらく待ってから再試行してください"
+        else:
+            detail = "APIキーの接続確認に失敗しました。キーとシークレットを確認してください"
+        raise HTTPException(status_code=400, detail=detail)
 
     key = ExchangeKey(
         user_id=current_user.id,
@@ -61,6 +69,6 @@ async def delete_exchange_key(
     )
     key = result.scalar_one_or_none()
     if not key:
-        raise HTTPException(status_code=404, detail="Key not found")
+        raise HTTPException(status_code=404, detail="APIキーが見つかりません")
     await db.delete(key)
     await db.commit()
