@@ -12,9 +12,7 @@ from app.models.user import User
 from app.schemas.bot import BotCreate, BotResponse, BotUpdate
 from app.schemas.trade import BacktestResponse, PerformanceResponse, TradeResponse
 from app.bot.backtest import run_backtest
-from app.services.exchanges.factory import create_exchange
-from app.core.security import decrypt
-from app.models.exchange_key import ExchangeKey
+from app.services.exchanges.factory import create_public_exchange
 
 router = APIRouter()
 
@@ -177,25 +175,11 @@ async def backtest_bot(
 
     bot = await _get_bot_or_404(bot_id, current_user, db)
 
-    key_result = await db.execute(
-        select(ExchangeKey).where(
-            ExchangeKey.user_id == current_user.id,
-            ExchangeKey.exchange == bot.exchange,
-        )
-    )
-    key = key_result.scalar_one_or_none()
-    if not key:
-        raise HTTPException(status_code=400, detail="取引所のAPIキーが登録されていません")
-
     params = bot.strategy_params or {}
     timeframe = params.get("timeframe", "1h")
     limit = PERIOD_TIMEFRAME_LIMIT.get(period, {}).get(timeframe, 500)
 
-    exchange = create_exchange(
-        bot.exchange,
-        decrypt(key.api_key_encrypted),
-        decrypt(key.api_secret_encrypted),
-    )
+    exchange = create_public_exchange(bot.exchange)
     try:
         ohlcv = await exchange.fetch_ohlcv(bot.symbol, timeframe, limit=limit)
     finally:
