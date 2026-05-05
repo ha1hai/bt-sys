@@ -85,6 +85,24 @@ export type Performance = {
   win_rate: number;
 };
 
+export type BacktestTrade = {
+  side: string;
+  price: number;
+  amount: number;
+  timestamp: number;
+  pnl: number | null;
+};
+
+export type BacktestResult = {
+  trades: BacktestTrade[];
+  equity_curve: { timestamp: number; equity: number }[];
+  total_pnl: number;
+  trade_count: number;
+  win_count: number;
+  win_rate: number;
+  max_drawdown: number;
+};
+
 export const bots = {
   list: () => request<Bot[]>("/bots"),
   get: (id: string) => request<Bot>(`/bots/${id}`),
@@ -96,6 +114,8 @@ export const bots = {
   stop: (id: string) => request<Bot>(`/bots/${id}/stop`, { method: "POST" }),
   delete: (id: string) => request<void>(`/bots/${id}`, { method: "DELETE" }),
   performance: (id: string) => request<Performance>(`/bots/${id}/performance`),
+  backtest: (id: string, period: "1m" | "3m" | "6m") =>
+    request<BacktestResult>(`/bots/${id}/backtest?period=${period}`),
 };
 
 // --- Exchange Keys ---

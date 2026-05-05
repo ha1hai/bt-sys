@@ -23,3 +23,21 @@ class PerformanceResponse(BaseModel):
     trade_count: int
     win_count: int
     win_rate: float
+
+
+class BacktestTradeResponse(BaseModel):
+    side: str
+    price: float
+    amount: float
+    timestamp: int
+    pnl: float | None
+
+
+class BacktestResponse(BaseModel):
+    trades: list[BacktestTradeResponse]
+    equity_curve: list[dict]
+    total_pnl: float
+    trade_count: int
+    win_count: int
+    win_rate: float
+    max_drawdown: float

@@ -95,10 +95,10 @@ export default function DashboardPage() {
               <div key={bot.id} className="bg-gray-900 rounded-xl p-5 border border-gray-800 space-y-4">
                 {/* ヘッダー */}
                 <div className="flex items-start justify-between">
-                  <div>
+                  <Link href={`/dashboard/bots/${bot.id}`} className="hover:opacity-80">
                     <p className="font-medium">{bot.name}</p>
                     <p className="text-xs text-gray-500 mt-0.5">{bot.exchange} · {bot.symbol}</p>
-                  </div>
+                  </Link>
                   <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${STATUS_STYLES[bot.status]}`}>
                     {STATUS_LABELS[bot.status]}
                   </span>

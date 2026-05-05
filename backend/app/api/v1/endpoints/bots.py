@@ -10,7 +10,11 @@ from app.models.bot import Bot
 from app.models.trade import Trade
 from app.models.user import User
 from app.schemas.bot import BotCreate, BotResponse, BotUpdate
-from app.schemas.trade import PerformanceResponse, TradeResponse
+from app.schemas.trade import BacktestResponse, PerformanceResponse, TradeResponse
+from app.bot.backtest import run_backtest
+from app.services.exchanges.factory import create_exchange
+from app.core.security import decrypt
+from app.models.exchange_key import ExchangeKey
 
 router = APIRouter()
 
@@ -150,6 +154,72 @@ async def get_performance(
         trade_count=row.trade_count,
         win_count=row.win_count or 0,
         win_rate=win_rate,
+    )
+
+
+PERIOD_LIMIT = {"1m": 43200, "3m": 43200, "6m": 43200}  # bitFlyer上限に合わせる
+PERIOD_TIMEFRAME_LIMIT = {
+    "1m": {"1m": 43200, "5m": 8640, "15m": 2880, "1h": 720, "4h": 180, "1d": 30},
+    "3m": {"1m": 43200, "5m": 25920, "15m": 8640, "1h": 2160, "4h": 540, "1d": 90},
+    "6m": {"1m": 43200, "5m": 43200, "15m": 25920, "1h": 4320, "4h": 1080, "1d": 180},
+}
+
+
+@router.get("/{bot_id}/backtest", response_model=BacktestResponse)
+async def backtest_bot(
+    bot_id: str,
+    period: str = "1m",
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    if period not in ("1m", "3m", "6m"):
+        raise HTTPException(status_code=400, detail="period は 1m / 3m / 6m を指定してください")
+
+    bot = await _get_bot_or_404(bot_id, current_user, db)
+
+    key_result = await db.execute(
+        select(ExchangeKey).where(
+            ExchangeKey.user_id == current_user.id,
+            ExchangeKey.exchange == bot.exchange,
+        )
+    )
+    key = key_result.scalar_one_or_none()
+    if not key:
+        raise HTTPException(status_code=400, detail="取引所のAPIキーが登録されていません")
+
+    params = bot.strategy_params or {}
+    timeframe = params.get("timeframe", "1h")
+    limit = PERIOD_TIMEFRAME_LIMIT.get(period, {}).get(timeframe, 500)
+
+    exchange = create_exchange(
+        bot.exchange,
+        decrypt(key.api_key_encrypted),
+        decrypt(key.api_secret_encrypted),
+    )
+    try:
+        ohlcv = await exchange.fetch_ohlcv(bot.symbol, timeframe, limit=limit)
+    finally:
+        await exchange.close()
+
+    result = run_backtest(
+        ohlcv=ohlcv,
+        strategy_name=bot.strategy,
+        strategy_params=params,
+        budget=bot.budget,
+        stop_loss_pct=bot.stop_loss_pct,
+    )
+
+    return BacktestResponse(
+        trades=[
+            {"side": t.side, "price": t.price, "amount": t.amount, "timestamp": t.timestamp, "pnl": t.pnl}
+            for t in result.trades
+        ],
+        equity_curve=result.equity_curve,
+        total_pnl=round(result.total_pnl, 2),
+        trade_count=result.trade_count,
+        win_count=result.win_count,
+        win_rate=round(result.win_rate, 1),
+        max_drawdown=round(result.max_drawdown, 2),
     )
 
 
