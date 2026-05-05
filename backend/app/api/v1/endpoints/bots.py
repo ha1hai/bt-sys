@@ -12,7 +12,7 @@ from app.models.user import User
 from app.schemas.bot import BotCreate, BotResponse, BotUpdate
 from app.schemas.trade import BacktestResponse, PerformanceResponse, TradeResponse
 from app.bot.backtest import run_backtest
-from app.services.exchanges.factory import create_public_exchange
+from app.services.exchanges.factory import create_public_exchange, backtest_symbol
 
 router = APIRouter()
 
@@ -181,7 +181,7 @@ async def backtest_bot(
 
     exchange = create_public_exchange(bot.exchange)
     try:
-        ohlcv = await exchange.fetch_ohlcv(bot.symbol, timeframe, limit=limit)
+        ohlcv = await exchange.fetch_ohlcv(backtest_symbol(bot.symbol), timeframe, limit=limit)
     finally:
         await exchange.close()
 
