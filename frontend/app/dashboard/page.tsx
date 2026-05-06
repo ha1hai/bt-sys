@@ -20,6 +20,7 @@ const STATUS_LABELS: Record<string, string> = {
 export default function DashboardPage() {
   const [botList, setBotList] = useState<Bot[]>([]);
   const [performances, setPerformances] = useState<Record<string, Performance>>({});
+  const [warnings, setWarnings] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -48,7 +49,10 @@ export default function DashboardPage() {
   };
 
   const handleStop = async (id: string) => {
-    await bots.stop(id);
+    const result = await bots.stop(id);
+    if (result.warning) {
+      setWarnings((prev) => ({ ...prev, [id]: result.warning! }));
+    }
     await load();
   };
 
@@ -107,6 +111,14 @@ export default function DashboardPage() {
                 {/* エラーメッセージ */}
                 {bot.error_message && (
                   <p className="text-xs text-red-400 bg-red-500/10 rounded p-2">{bot.error_message}</p>
+                )}
+
+                {/* 未決済ポジション警告 */}
+                {warnings[bot.id] && (
+                  <div className="flex items-start gap-1.5 text-xs text-amber-400 bg-amber-500/10 rounded p-2">
+                    <AlertCircle size={13} className="mt-0.5 shrink-0" />
+                    <span>{warnings[bot.id]}</span>
+                  </div>
                 )}
 
                 {/* 成績 */}

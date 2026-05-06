@@ -64,6 +64,7 @@ export type Bot = {
   take_profit_pct: number | null;
   status: "running" | "stopped" | "error";
   error_message: string | null;
+  warning: string | null;
   last_executed_at: string | null;
   created_at: string;
 };

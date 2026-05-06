@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.v1.deps import get_current_user
 from app.db.base import get_db
 from app.models.bot import Bot
-from app.models.trade import Trade
+from app.models.trade import Position, Trade
 from app.models.user import User
 from app.schemas.bot import BotCreate, BotResponse, BotUpdate
 from app.schemas.trade import BacktestResponse, PerformanceResponse, TradeResponse
@@ -80,6 +80,13 @@ async def delete_bot(
     bot = await _get_bot_or_404(bot_id, current_user, db)
     if bot.status == "running":
         raise HTTPException(status_code=400, detail="稼働中のボットは削除できません。先に停止してください")
+    pos_result = await db.execute(select(Position).where(Position.bot_id == bot_id))
+    position = pos_result.scalar_one_or_none()
+    if position:
+        raise HTTPException(
+            status_code=400,
+            detail="未決済のポジションがあります。取引所で注文をキャンセル・決済してから削除してください"
+        )
     await db.delete(bot)
     await db.commit()
 
@@ -110,7 +117,17 @@ async def stop_bot(
     bot.status = "stopped"
     await db.commit()
     await db.refresh(bot)
-    return bot
+
+    pos_result = await db.execute(select(Position).where(Position.bot_id == bot_id))
+    position = pos_result.scalar_one_or_none()
+    response = BotResponse.model_validate(bot)
+    if position:
+        order_type = getattr(bot, "order_type", "market") or "market"
+        if order_type == "ifdoco":
+            response.warning = "未決済のポジションがあります。bitFlyer の管理画面で IFDOCO 注文を確認してください"
+        else:
+            response.warning = "未決済のポジションがあります。取引所で保有ポジションを確認してください"
+    return response
 
 
 @router.get("/{bot_id}/trades", response_model=list[TradeResponse])

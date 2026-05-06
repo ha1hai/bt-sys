@@ -71,6 +71,7 @@ class BotResponse(BaseModel):
     error_message: str | None
     last_executed_at: datetime | None
     created_at: datetime
+    warning: str | None = None
 
     class Config:
         from_attributes = True
