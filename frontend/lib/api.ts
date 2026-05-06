@@ -60,6 +60,8 @@ export type Bot = {
   strategy_params: Record<string, unknown>;
   budget: number;
   stop_loss_pct: number;
+  order_type: string;
+  take_profit_pct: number | null;
   status: "running" | "stopped" | "error";
   error_message: string | null;
   last_executed_at: string | null;
@@ -75,6 +77,8 @@ export type BotCreate = {
   strategy_params: Record<string, unknown>;
   budget: number;
   stop_loss_pct: number;
+  order_type: string;
+  take_profit_pct: number | null;
 };
 
 export type Performance = {

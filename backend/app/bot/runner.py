@@ -60,57 +60,99 @@ async def run_bot(bot: Bot, session) -> None:
         ticker = await exchange.fetch_ticker(bot.symbol)
         current_price = ticker.last
 
-        # リスク管理：損失が stop_loss_pct% を超えたら強制決済
-        if position:
+        # 成行注文モードのみrunner側でストップロスを管理（IFDOCOはbitFlyer側で管理）
+        order_type = getattr(bot, "order_type", "market") or "market"
+        if order_type == "market" and position:
             loss_pct = (current_price - position.entry_price) / position.entry_price * 100
             if position.side == "long" and loss_pct <= -bot.stop_loss_pct:
                 signal = "sell"
                 logger.warning(f"Bot {bot.id}: stop loss triggered")
 
         if signal == "buy" and not position:
-            # 資金枠内で購入数量を計算
             balance = await exchange.fetch_balance()
             base_currency = bot.symbol.split("/")[1]
             available = min(balance.get(base_currency, 0), bot.budget)
             amount = available / current_price
 
             if amount > 0:
-                order = await exchange.create_order(bot.symbol, "buy", amount)
-                trade = Trade(
+                order_type = getattr(bot, "order_type", "market") or "market"
+                take_profit_pct = getattr(bot, "take_profit_pct", None)
+
+                if order_type == "ifdoco" and take_profit_pct and hasattr(exchange, "send_ifdoco"):
+                    # IFDOCO: 成行買い + OCO（利確指値・損切り逆指値）を一括送信
+                    acceptance_id = await exchange.send_ifdoco(
+                        symbol=bot.symbol,
+                        amount=amount,
+                        take_profit_pct=take_profit_pct,
+                        stop_loss_pct=bot.stop_loss_pct,
+                        current_price=current_price,
+                    )
+                    take_profit_price = round(current_price * (1 + take_profit_pct / 100))
+                    stop_loss_price = round(current_price * (1 - bot.stop_loss_pct / 100))
+                    session.add(Trade(
+                        bot_id=bot.id,
+                        exchange_order_id=acceptance_id,
+                        side="buy",
+                        symbol=bot.symbol,
+                        amount=amount,
+                        price=current_price,
+                        executed_at=datetime.now(timezone.utc),
+                    ))
+                    session.add(Position(
+                        bot_id=bot.id,
+                        side="long",
+                        amount=amount,
+                        entry_price=current_price,
+                        opened_at=datetime.now(timezone.utc),
+                    ))
+                    await notify(
+                        bot,
+                        f"IFDOCO BUY {bot.symbol} @ {current_price} "
+                        f"TP: {take_profit_price} SL: {stop_loss_price}"
+                    )
+                else:
+                    # 成行注文
+                    order = await exchange.create_order(bot.symbol, "buy", amount)
+                    session.add(Trade(
+                        bot_id=bot.id,
+                        exchange_order_id=order.order_id,
+                        side="buy",
+                        symbol=bot.symbol,
+                        amount=order.amount,
+                        price=order.price,
+                        executed_at=datetime.now(timezone.utc),
+                    ))
+                    session.add(Position(
+                        bot_id=bot.id,
+                        side="long",
+                        amount=order.amount,
+                        entry_price=order.price,
+                        opened_at=datetime.now(timezone.utc),
+                    ))
+                    await notify(bot, f"BUY {bot.symbol} @ {order.price}")
+
+        elif signal == "sell" and position:
+            order_type = getattr(bot, "order_type", "market") or "market"
+            if order_type == "ifdoco":
+                # IFDOCO では bitFlyer 側で OCO が管理するため runner からの売り注文は不要
+                # ポジションレコードのみ削除してDBを整合させる
+                await session.delete(position)
+                await notify(bot, f"SELL signal {bot.symbol} (managed by IFDOCO on exchange)")
+            else:
+                order = await exchange.create_order(bot.symbol, "sell", position.amount)
+                pnl = (order.price - position.entry_price) * position.amount
+                session.add(Trade(
                     bot_id=bot.id,
                     exchange_order_id=order.order_id,
-                    side="buy",
+                    side="sell",
                     symbol=bot.symbol,
                     amount=order.amount,
                     price=order.price,
+                    pnl=pnl,
                     executed_at=datetime.now(timezone.utc),
-                )
-                session.add(trade)
-                session.add(Position(
-                    bot_id=bot.id,
-                    side="long",
-                    amount=order.amount,
-                    entry_price=order.price,
-                    opened_at=datetime.now(timezone.utc),
                 ))
-                await notify(bot, f"BUY {bot.symbol} @ {order.price}")
-
-        elif signal == "sell" and position:
-            order = await exchange.create_order(bot.symbol, "sell", position.amount)
-            pnl = (order.price - position.entry_price) * position.amount
-            trade = Trade(
-                bot_id=bot.id,
-                exchange_order_id=order.order_id,
-                side="sell",
-                symbol=bot.symbol,
-                amount=order.amount,
-                price=order.price,
-                pnl=pnl,
-                executed_at=datetime.now(timezone.utc),
-            )
-            session.add(trade)
-            await session.delete(position)
-            await notify(bot, f"SELL {bot.symbol} @ {order.price} PnL: {pnl:.2f}")
+                await session.delete(position)
+                await notify(bot, f"SELL {bot.symbol} @ {order.price} PnL: {pnl:.2f}")
 
         bot.last_executed_at = datetime.now(timezone.utc)
 

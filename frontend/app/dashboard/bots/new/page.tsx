@@ -30,6 +30,8 @@ export default function NewBotPage() {
     strategy: "macd",
     budget: 10000,
     stop_loss_pct: 5,
+    order_type: "market",
+    take_profit_pct: 5,
     interval_seconds: 3600,
     timeframe: "1h",
     fast: 12,
@@ -52,6 +54,8 @@ export default function NewBotPage() {
         strategy: form.strategy,
         budget: form.budget,
         stop_loss_pct: form.stop_loss_pct,
+        order_type: form.order_type,
+        take_profit_pct: form.order_type === "ifdoco" ? form.take_profit_pct : null,
         strategy_params: {
           interval_seconds: form.interval_seconds,
           timeframe: form.timeframe,
@@ -115,6 +119,18 @@ export default function NewBotPage() {
             <input type="number" value={form.stop_loss_pct} onChange={(e) => set("stop_loss_pct", Number(e.target.value))}
               min={0.1} max={100} step={0.1} required className="input" />
           </FieldWithTip>
+          <FieldWithTip label="注文タイプ" tip="成行：シグナル発生時に即座に発注。IFDOCO：買い注文と同時に利確・損切り注文を bitFlyer に一括登録。より確実なリスク管理が可能です。">
+            <select value={form.order_type} onChange={(e) => set("order_type", e.target.value)} className="input">
+              <option value="market">成行（シグナル発生時に即時発注）</option>
+              <option value="ifdoco">IFDOCO（利確・損切りを同時設定）</option>
+            </select>
+          </FieldWithTip>
+          {form.order_type === "ifdoco" && (
+            <FieldWithTip label="利確（%）" tip="IFDOCO使用時のみ有効。買い価格からこの割合上昇したら自動で売却します。例：5% に設定すると、100万円で買ったポジションが105万円になったら利確します。">
+              <input type="number" value={form.take_profit_pct} onChange={(e) => set("take_profit_pct", Number(e.target.value))}
+                min={0.1} max={100} step={0.1} required className="input" />
+            </FieldWithTip>
+          )}
         </section>
 
         {/* 戦略・実行設定 */}

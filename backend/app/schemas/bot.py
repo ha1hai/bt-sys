@@ -42,6 +42,8 @@ class BotCreate(BaseModel):
     strategy_params: dict[str, Any] = Field(default_factory=dict)
     budget: float
     stop_loss_pct: float = 5.0
+    order_type: str = "market"  # market / ifdoco
+    take_profit_pct: float | None = None
 
 
 class BotUpdate(BaseModel):
@@ -49,6 +51,8 @@ class BotUpdate(BaseModel):
     strategy_params: dict[str, Any] | None = None
     budget: float | None = None
     stop_loss_pct: float | None = None
+    order_type: str | None = None
+    take_profit_pct: float | None = None
 
 
 class BotResponse(BaseModel):
@@ -61,6 +65,8 @@ class BotResponse(BaseModel):
     strategy_params: dict[str, Any]
     budget: float
     stop_loss_pct: float
+    order_type: str
+    take_profit_pct: float | None
     status: str
     error_message: str | None
     last_executed_at: datetime | None

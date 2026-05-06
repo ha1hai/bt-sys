@@ -19,7 +19,9 @@ class Bot(Base):
     strategy: Mapped[str] = mapped_column(String(50), nullable=False)  # e.g. "macd"
     strategy_params: Mapped[dict] = mapped_column(JSON, default=dict)
     budget: Mapped[float] = mapped_column(Float, nullable=False)
-    stop_loss_pct: Mapped[float] = mapped_column(Float, default=5.0)  # 損失がX%超で自動停止
+    stop_loss_pct: Mapped[float] = mapped_column(Float, default=5.0)
+    order_type: Mapped[str] = mapped_column(String(20), default="market")  # market / ifdoco
+    take_profit_pct: Mapped[float | None] = mapped_column(Float, nullable=True)  # 利確%（ifdoco時）
     status: Mapped[str] = mapped_column(String(20), default="stopped")  # running / stopped / error
     error_message: Mapped[str | None] = mapped_column(String(500), nullable=True)
     last_executed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

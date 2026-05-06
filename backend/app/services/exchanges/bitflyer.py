@@ -2,6 +2,13 @@ import ccxt.async_support as ccxt
 
 from app.services.exchanges.base import BaseExchange, Order, Ticker
 
+# bitFlyer の通貨ペア表記変換（ccxt形式 → bitFlyer API形式）
+_PRODUCT_CODE: dict[str, str] = {
+    "BTC/JPY": "BTC_JPY",
+    "ETH/JPY": "ETH_JPY",
+    "XRP/JPY": "XRP_JPY",
+}
+
 
 class BitflyerExchange(BaseExchange):
     def __init__(self, api_key: str, api_secret: str):
@@ -30,6 +37,52 @@ class BitflyerExchange(BaseExchange):
     async def fetch_balance(self) -> dict[str, float]:
         balance = await self._client.fetch_balance()
         return {k: v["free"] for k, v in balance["total"].items() if v > 0}
+
+    async def send_ifdoco(
+        self,
+        symbol: str,
+        amount: float,
+        take_profit_pct: float,
+        stop_loss_pct: float,
+        current_price: float,
+    ) -> str:
+        """
+        IFDOCO注文を送信する。
+        1発目: 成行買い
+        2発目: OCO（利確指値 + 損切り逆指値）
+        戻り値: parent_order_acceptance_id
+        """
+        product_code = _PRODUCT_CODE.get(symbol, symbol.replace("/", "_"))
+        take_profit_price = round(current_price * (1 + take_profit_pct / 100))
+        stop_loss_price = round(current_price * (1 - stop_loss_pct / 100))
+
+        result = await self._client.private_post_sendparentorder({
+            "order_method": "IFDOCO",
+            "time_in_force": "GTC",
+            "parameters": [
+                {
+                    "product_code": product_code,
+                    "condition_type": "MARKET",
+                    "side": "BUY",
+                    "size": amount,
+                },
+                {
+                    "product_code": product_code,
+                    "condition_type": "LIMIT",
+                    "side": "SELL",
+                    "price": take_profit_price,
+                    "size": amount,
+                },
+                {
+                    "product_code": product_code,
+                    "condition_type": "STOP",
+                    "side": "SELL",
+                    "trigger_price": stop_loss_price,
+                    "size": amount,
+                },
+            ],
+        })
+        return result.get("parent_order_acceptance_id", "")
 
     async def close(self) -> None:
         await self._client.close()
