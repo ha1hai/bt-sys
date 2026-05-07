@@ -11,7 +11,7 @@ from app.models.trade import Position, Trade
 from app.models.user import User
 from app.schemas.bot import BotCreate, BotResponse, BotUpdate
 from app.schemas.trade import BacktestResponse, PerformanceResponse, TradeResponse
-from app.bot.backtest import run_backtest
+from app.bot.backtest import run_backtest, DEFAULT_FEE_RATE
 from app.services.exchanges.factory import create_public_exchange, backtest_symbol
 
 router = APIRouter()
@@ -212,15 +212,17 @@ async def backtest_bot(
 
     return BacktestResponse(
         trades=[
-            {"side": t.side, "price": t.price, "amount": t.amount, "timestamp": t.timestamp, "pnl": t.pnl}
+            {"side": t.side, "price": t.price, "amount": t.amount, "timestamp": t.timestamp, "fee": t.fee, "pnl": t.pnl}
             for t in result.trades
         ],
         equity_curve=result.equity_curve,
         total_pnl=round(result.total_pnl, 2),
+        total_fee=round(result.total_fee, 2),
         trade_count=result.trade_count,
         win_count=result.win_count,
         win_rate=round(result.win_rate, 1),
         max_drawdown=round(result.max_drawdown, 2),
+        fee_rate=DEFAULT_FEE_RATE,
     )
 
 

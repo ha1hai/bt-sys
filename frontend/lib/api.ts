@@ -95,6 +95,7 @@ export type BacktestTrade = {
   price: number;
   amount: number;
   timestamp: number;
+  fee: number;
   pnl: number | null;
 };
 
@@ -102,10 +103,12 @@ export type BacktestResult = {
   trades: BacktestTrade[];
   equity_curve: { timestamp: number; equity: number }[];
   total_pnl: number;
+  total_fee: number;
   trade_count: number;
   win_count: number;
   win_rate: number;
   max_drawdown: number;
+  fee_rate: number;
 };
 
 export const bots = {

@@ -117,7 +117,13 @@ export default function BotDetailPage() {
                   label="総損益"
                   value={`${result.total_pnl >= 0 ? "+" : ""}${result.total_pnl.toLocaleString(undefined, { maximumFractionDigits: 2 })} USDT`}
                   positive={result.total_pnl >= 0}
-                  description="全売却取引の損益合計。計算式：Σ (売却価格 − 購入価格) × 数量"
+                  description="全売却取引の損益合計（手数料控除後）。計算式：Σ (純売却額 − 購入コスト)"
+                />
+                <StatCard
+                  label="取引手数料"
+                  value={`${result.total_fee.toLocaleString(undefined, { maximumFractionDigits: 4 })} USDT`}
+                  positive={false}
+                  description={`適用手数料率：${(result.fee_rate * 100).toFixed(2)}%（bitFlyer Lightning 現物・直近30日取引量10万円未満）。買い・売り各々に適用。`}
                 />
                 <StatCard
                   label="取引回数"
@@ -179,6 +185,7 @@ export default function BotDetailPage() {
                           <th className="text-left px-5 py-2">日時</th>
                           <th className="text-left px-4 py-2">売買</th>
                           <th className="text-right px-4 py-2">価格</th>
+                          <th className="text-right px-4 py-2">手数料</th>
                           <th className="text-right px-5 py-2">損益</th>
                         </tr>
                       </thead>
@@ -195,12 +202,15 @@ export default function BotDetailPage() {
                               </span>
                             </td>
                             <td className="px-4 py-2.5 text-right text-gray-300">
-                              {t.price.toLocaleString()}円
+                              {t.price.toLocaleString(undefined, { maximumFractionDigits: 2 })} USDT
+                            </td>
+                            <td className="px-4 py-2.5 text-right text-gray-500 text-xs">
+                              -{t.fee.toLocaleString(undefined, { maximumFractionDigits: 4 })}
                             </td>
                             <td className="px-5 py-2.5 text-right font-medium">
                               {t.pnl != null ? (
                                 <span className={t.pnl >= 0 ? "text-emerald-400" : "text-red-400"}>
-                                  {t.pnl >= 0 ? "+" : ""}{t.pnl.toLocaleString(undefined, { maximumFractionDigits: 0 })}円
+                                  {t.pnl >= 0 ? "+" : ""}{t.pnl.toLocaleString(undefined, { maximumFractionDigits: 4 })} USDT
                                 </span>
                               ) : (
                                 <span className="text-gray-600">—</span>

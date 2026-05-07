@@ -30,6 +30,7 @@ class BacktestTradeResponse(BaseModel):
     price: float
     amount: float
     timestamp: int
+    fee: float
     pnl: float | None
 
 
@@ -37,7 +38,9 @@ class BacktestResponse(BaseModel):
     trades: list[BacktestTradeResponse]
     equity_curve: list[dict]
     total_pnl: float
+    total_fee: float
     trade_count: int
     win_count: int
     win_rate: float
     max_drawdown: float
+    fee_rate: float
