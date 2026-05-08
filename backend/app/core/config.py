@@ -7,6 +7,9 @@ class Settings(BaseSettings):
     access_token_expire_minutes: int = 60
     encryption_key: str
 
+    dev_mode: bool = False
+    dev_user_email: str = "dev@example.com"
+
     discord_webhook_url: str = ""
     line_channel_access_token: str = ""
 

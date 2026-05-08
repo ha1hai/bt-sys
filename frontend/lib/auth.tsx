@@ -20,6 +20,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    if (process.env.NEXT_PUBLIC_DEV_MODE === "true") {
+      localStorage.setItem("token", "dev-token");
+      setToken("dev-token");
+      setEmail("dev@example.com");
+      setLoading(false);
+      return;
+    }
     const stored = localStorage.getItem("token");
     if (stored) {
       setToken(stored);
