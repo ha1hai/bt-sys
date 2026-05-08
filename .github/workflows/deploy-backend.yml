@@ -12,6 +12,11 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      - name: Skip (deployment not configured)
+        run: |
+          echo "Deployment is not yet configured. Skipping."
+          exit 0
+
       - uses: actions/checkout@v4
 
       - name: Deploy to VPS
