@@ -11,12 +11,9 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
 
-    steps:
-      - name: Skip (deployment not configured)
-        run: |
-          echo "Deployment is not yet configured. Skipping."
-          exit 0
+    if: false
 
+    steps:
       - uses: actions/checkout@v4
 
       - uses: actions/setup-node@v4
