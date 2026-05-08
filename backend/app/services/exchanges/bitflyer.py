@@ -42,19 +42,19 @@ class BitflyerExchange(BaseExchange):
         self,
         symbol: str,
         amount: float,
+        entry_price: float,
         take_profit_pct: float,
         stop_loss_pct: float,
-        current_price: float,
     ) -> str:
         """
         IFDOCO注文を送信する。
-        1発目: 成行買い
-        2発目: OCO（利確指値 + 損切り逆指値）
+        1発目: 指値買い（maker エントリー）
+        2発目: OCO（指値利確 maker + 逆指値損切り taker）
         戻り値: parent_order_acceptance_id
         """
         product_code = _PRODUCT_CODE.get(symbol, symbol.replace("/", "_"))
-        take_profit_price = round(current_price * (1 + take_profit_pct / 100))
-        stop_loss_price = round(current_price * (1 - stop_loss_pct / 100))
+        take_profit_price = round(entry_price * (1 + take_profit_pct / 100))
+        stop_loss_price = round(entry_price * (1 - stop_loss_pct / 100))
 
         result = await self._client.private_post_sendparentorder({
             "order_method": "IFDOCO",
@@ -62,8 +62,9 @@ class BitflyerExchange(BaseExchange):
             "parameters": [
                 {
                     "product_code": product_code,
-                    "condition_type": "MARKET",
+                    "condition_type": "LIMIT",
                     "side": "BUY",
+                    "price": entry_price,
                     "size": amount,
                 },
                 {

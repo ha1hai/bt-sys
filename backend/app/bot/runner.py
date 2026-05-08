@@ -79,35 +79,37 @@ async def run_bot(bot: Bot, session) -> None:
                 take_profit_pct = getattr(bot, "take_profit_pct", None)
 
                 if order_type == "ifdoco" and take_profit_pct and hasattr(exchange, "send_ifdoco"):
-                    # IFDOCO: 成行買い + OCO（利確指値・損切り逆指値）を一括送信
+                    # IFDOCO: 指値買い(maker) + OCO（指値利確 maker + 逆指値損切り taker）
+                    # エントリーは bid 価格で指値 → maker になりスプレッドコストを回避
+                    entry_price = ticker.bid
                     acceptance_id = await exchange.send_ifdoco(
                         symbol=bot.symbol,
                         amount=amount,
+                        entry_price=entry_price,
                         take_profit_pct=take_profit_pct,
                         stop_loss_pct=bot.stop_loss_pct,
-                        current_price=current_price,
                     )
-                    take_profit_price = round(current_price * (1 + take_profit_pct / 100))
-                    stop_loss_price = round(current_price * (1 - bot.stop_loss_pct / 100))
+                    take_profit_price = round(entry_price * (1 + take_profit_pct / 100))
+                    stop_loss_price = round(entry_price * (1 - bot.stop_loss_pct / 100))
                     session.add(Trade(
                         bot_id=bot.id,
                         exchange_order_id=acceptance_id,
                         side="buy",
                         symbol=bot.symbol,
                         amount=amount,
-                        price=current_price,
+                        price=entry_price,
                         executed_at=datetime.now(timezone.utc),
                     ))
                     session.add(Position(
                         bot_id=bot.id,
                         side="long",
                         amount=amount,
-                        entry_price=current_price,
+                        entry_price=entry_price,
                         opened_at=datetime.now(timezone.utc),
                     ))
                     await notify(
                         bot,
-                        f"IFDOCO BUY {bot.symbol} @ {current_price} "
+                        f"IFDOCO BUY {bot.symbol} @ {entry_price} (limit/maker) "
                         f"TP: {take_profit_price} SL: {stop_loss_price}"
                     )
                 else:
