@@ -126,6 +126,31 @@ export const bots = {
     request<BacktestResult>(`/bots/${id}/backtest?period=${period}`),
 };
 
+// --- Trades ---
+export type DashboardSummary = {
+  summary: {
+    total_pnl: number;
+    trade_count: number;
+    win_count: number;
+    win_rate: number;
+  };
+  daily_pnl: { date: string; pnl: number }[];
+  recent_trades: {
+    id: string;
+    bot_name: string;
+    side: string;
+    symbol: string;
+    amount: number;
+    price: number;
+    pnl: number | null;
+    executed_at: string;
+  }[];
+};
+
+export const trades = {
+  summary: () => request<DashboardSummary>("/trades/summary"),
+};
+
 // --- Exchange Keys ---
 export type ExchangeKey = {
   id: string;
